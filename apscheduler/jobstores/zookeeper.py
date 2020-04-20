@@ -1,5 +1,6 @@
+from __future__ import absolute_import
+
 import os
-import pickle
 from datetime import datetime
 
 from pytz import utc
@@ -8,6 +9,11 @@ from kazoo.exceptions import NoNodeError, NodeExistsError
 from apscheduler.jobstores.base import BaseJobStore, JobLookupError, ConflictingIdError
 from apscheduler.util import maybe_ref, datetime_to_utc_timestamp, utc_timestamp_to_datetime
 from apscheduler.job import Job
+
+try:
+    import cPickle as pickle
+except ImportError:  # pragma: nocover
+    import pickle
 
 try:
     from kazoo.client import KazooClient
@@ -32,7 +38,7 @@ class ZooKeeperJobStore(BaseJobStore):
 
     def __init__(self, path='/apscheduler', client=None, close_connection_on_exit=False,
                  pickle_protocol=pickle.HIGHEST_PROTOCOL, **connect_args):
-        super().__init__()
+        super(ZooKeeperJobStore, self).__init__()
         self.pickle_protocol = pickle_protocol
         self.close_connection_on_exit = close_connection_on_exit
 
@@ -53,13 +59,13 @@ class ZooKeeperJobStore(BaseJobStore):
         self._ensured_path = True
 
     def start(self, scheduler, alias):
-        super().start(scheduler, alias)
+        super(ZooKeeperJobStore, self).start(scheduler, alias)
         if not self.client.connected:
             self.client.start()
 
     def lookup_job(self, job_id):
         self._ensure_paths()
-        node_path = os.path.join(self.path, job_id)
+        node_path = self.path + "/" + str(job_id)
         try:
             content, _ = self.client.get(node_path)
             doc = pickle.loads(content)
@@ -86,7 +92,8 @@ class ZooKeeperJobStore(BaseJobStore):
 
     def add_job(self, job):
         self._ensure_paths()
-        node_path = os.path.join(self.path,  str(job.id))
+        # node_path = self.path + "/" + str(job.id)
+        node_path = self.path + "/" + str(job.id)
         value = {
             'next_run_time': datetime_to_utc_timestamp(job.next_run_time),
             'job_state': job.__getstate__()
@@ -99,7 +106,7 @@ class ZooKeeperJobStore(BaseJobStore):
 
     def update_job(self, job):
         self._ensure_paths()
-        node_path = os.path.join(self.path,  str(job.id))
+        node_path = self.path + "/" + str(job.id)
         changes = {
             'next_run_time': datetime_to_utc_timestamp(job.next_run_time),
             'job_state': job.__getstate__()
@@ -112,7 +119,7 @@ class ZooKeeperJobStore(BaseJobStore):
 
     def remove_job(self, job_id):
         self._ensure_paths()
-        node_path = os.path.join(self.path,  str(job_id))
+        node_path = self.path + "/" + str(job_id)
         try:
             self.client.delete(node_path)
         except NoNodeError:
@@ -145,7 +152,7 @@ class ZooKeeperJobStore(BaseJobStore):
         all_ids = self.client.get_children(self.path)
         for node_name in all_ids:
             try:
-                node_path = os.path.join(self.path, node_name)
+                node_path = self.path + "/" +node_name
                 content, _ = self.client.get(node_path)
                 doc = pickle.loads(content)
                 job_def = {
